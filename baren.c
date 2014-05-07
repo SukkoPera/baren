@@ -13,10 +13,6 @@ static gboolean apply = FALSE;
 static gboolean matchext = FALSE;
 
 
-void printht (gpointer key, gpointer value, gpointer user_data) {
-	g_print ("--> %s|%s\n", (gchar *) key, (gchar *) value);
-}
-
 void process_dir (gchar *path, const GRegex *rx, const gchar *replacement) {
 	GDir *dir;
 	GError *error;
@@ -37,7 +33,7 @@ void process_dir (gchar *path, const GRegex *rx, const gchar *replacement) {
 			char *fullfilename = g_build_filename (path, filename, NULL);
 			
 			if (g_file_test (fullfilename, G_FILE_TEST_IS_DIR)) {
-				// Directory, recurse if requested
+				// Directory, recurse only if requested
 				if (recurse) {
 					if (verbose)
 						g_print ("dr %s\n", fullfilename);
@@ -46,7 +42,7 @@ void process_dir (gchar *path, const GRegex *rx, const gchar *replacement) {
 					g_print ("ds %s\n", fullfilename);
 				}
 				
-				// After (maybe) recurring, rename if requested
+				// After possibly recurring, rename if requested
 				if (rendirs) {
 					error = NULL;
 					gchar *n = g_regex_replace (rx, filename, -1, 0, replacement, 0, &error);
@@ -56,12 +52,18 @@ void process_dir (gchar *path, const GRegex *rx, const gchar *replacement) {
 						
 						gchar *fullto = g_build_filename (path, n, NULL);
 						if (g_file_test (fullto, G_FILE_TEST_EXISTS)) {
-							// File already exists
-							if (overwrite) {
+							// Dir/File already exists
+							if (overwrite && apply && g_rename (fullfilename, fullto) {
 								g_print ("d* %s\n", fullto);
+								g_hash_table_add (renamedFiles, fullto);
 							} else {
 								g_print ("d! %s\n", fullto);
 							}
+						} else if (g_hash_table_contains (renamedFiles, fullto)) {
+							// File would overwrite an already-renamed file.
+							// In this case we never overwrite.
+							g_print (" $ %s\n", fullto);
+							g_free  (fullto);
 						} else {
 							if (apply && g_rename (fullfilename, fullto) < 0)
 								g_print ("de %s\n", fullto);
@@ -76,7 +78,9 @@ void process_dir (gchar *path, const GRegex *rx, const gchar *replacement) {
 					g_free  (n);
 				}
 			} else {
-				// File, try to match & rename
+				// File, always try to match & rename
+				
+				// Prepare to skip file extensions, in case
 				gssize len = strlen (filename);
 				gchar *lastdot = NULL;
 				if (!matchext) {
@@ -110,6 +114,8 @@ void process_dir (gchar *path, const GRegex *rx, const gchar *replacement) {
 							g_free  (fullto);
 						}
 					} else if (g_hash_table_contains (renamedFiles, fullto)) {
+						// File would overwrite an already-renamed file.
+						// In this case we never overwrite.
 						g_print (" $ %s\n", fullto);
 						g_free  (fullto);
 					} else {
@@ -148,11 +154,11 @@ int main (int argc, char *argv[]) {
 	GOptionEntry entries[] = {
 		{"verbose", 'v', 0, G_OPTION_ARG_NONE, &verbose, "Be verbose", NULL},
 		{"apply", 'a', 0, G_OPTION_ARG_NONE, &apply, "Apply changes, do not simulate only", NULL},
-		{"case-insensitive", 'i', 0, G_OPTION_ARG_NONE, &caseless, "Match regexp case-insensitively", NULL},
+		{"case-insensitive", 'i', 0, G_OPTION_ARG_NONE, &caseless, "Match pattern case-insensitively", NULL},
 		{"recurse", 'r', 0, G_OPTION_ARG_NONE, &recurse, "Recurse into subdirectories", NULL},
-		{"force-overwrite", 'f', 0, G_OPTION_ARG_NONE, &overwrite, "Overwrite existing files", NULL},
+		{"force-overwrite", 'f', 0, G_OPTION_ARG_NONE, &overwrite, "Overwrite existing files/directories", NULL},
 		{"rename-directories", 'n', 0, G_OPTION_ARG_NONE, &rendirs, "Rename directories as well, not only files", NULL},
-		{"match-extensions", 'e', 0, G_OPTION_ARG_NONE, &matchext, "Match regexp in file extensions as well", NULL},
+		{"match-extensions", 'e', 0, G_OPTION_ARG_NONE, &matchext, "Match pattern in file extensions as well", NULL},
 		{"base-directory", 'd', 0, G_OPTION_ARG_FILENAME, &path, "Match files in path instead of current directory", "DIRECTORY"},
 		{NULL}
 	};
@@ -165,9 +171,10 @@ int main (int argc, char *argv[]) {
 		"   e File/Directory new name, rename failed\n"
 		"   * File/Directory new name, overwrite forced\n"
 		"   ! File/Directory new name, overwrite disabled\n"
-		"  ds Directory, recursion disabled\n"
-		"  dr Directory, recursion enabled\n"
-		"An initial 'd' means 'directory'. # and R are only shown in verbose mode.";
+		"   $ File/Directory new name, would overwrite already-renamed file\n"
+		"  ds Directory, not recursing\n"
+		"  dr Directory, recursing\n"
+		"An initial 'd' means 'directory'. # and dr are only shown in verbose mode.";
 	
 	context = g_option_context_new ("PATTERN REPLACEMENT - Command-line Batch File Renamer");
 	g_option_context_add_main_entries (context, entries, NULL);
