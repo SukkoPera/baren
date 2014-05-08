@@ -13,14 +13,17 @@ static gboolean apply = FALSE;
 static gboolean matchext = FALSE;
 
 
-void process_dir (gchar *path, const GRegex *rx, const gchar *replacement) {
+// Returns true if no files are overwritten
+gboolean process_dir (gchar *path, const GRegex *rx, const gchar *replacement) {
 	GDir *dir;
 	GError *error;
 	GHashTable *renamedFiles;
+	gboolean ret;
 	
 	g_debug ("Processing directory: \"%s\"", path);
 	
 	renamedFiles = g_hash_table_new_full (g_str_hash, g_str_equal, g_free, NULL);
+	ret = TRUE;
 	
 	error = NULL;
 	if (!(dir = g_dir_open (path, 0, &error))) {
@@ -41,7 +44,7 @@ void process_dir (gchar *path, const GRegex *rx, const gchar *replacement) {
 				} else {
 					g_print ("ds %s\n", fullfilename);
 				}
-				
+#if 0				// This code must be rewritten or refactored with the file case!
 				// After possibly recurring, rename if requested
 				if (rendirs) {
 					error = NULL;
@@ -53,7 +56,7 @@ void process_dir (gchar *path, const GRegex *rx, const gchar *replacement) {
 						gchar *fullto = g_build_filename (path, n, NULL);
 						if (g_file_test (fullto, G_FILE_TEST_EXISTS)) {
 							// Dir/File already exists
-							if (overwrite && apply && g_rename (fullfilename, fullto) {
+							if (overwrite && apply && g_rename (fullfilename, fullto)) {
 								g_print ("d* %s\n", fullto);
 								g_hash_table_add (renamedFiles, fullto);
 							} else {
@@ -77,6 +80,7 @@ void process_dir (gchar *path, const GRegex *rx, const gchar *replacement) {
 					}
 					g_free  (n);
 				}
+#endif
 			} else {
 				// File, always try to match & rename
 				
@@ -106,9 +110,15 @@ void process_dir (gchar *path, const GRegex *rx, const gchar *replacement) {
 					}
 					if (g_file_test (fullto, G_FILE_TEST_EXISTS)) {
 						// File already exists
-						if (overwrite && apply && g_rename (fullfilename, fullto) < 0) {
-							g_hash_table_add (renamedFiles, fullto);
-							g_print (" * %s\n", fullto);
+						ret = FALSE;
+						if (overwrite) {
+							if (apply && g_rename (fullfilename, fullto) < 0) {
+								g_print (" E %s\n", fullto);
+								g_free  (fullto);
+							} else {
+								g_hash_table_add (renamedFiles, fullto);
+								g_print (" * %s\n", fullto);
+							}
 						} else {
 							g_print (" ! %s\n", fullto);
 							g_free  (fullto);
@@ -119,6 +129,7 @@ void process_dir (gchar *path, const GRegex *rx, const gchar *replacement) {
 						g_print (" $ %s\n", fullto);
 						g_free  (fullto);
 					} else {
+						// File does not exist
 						if (apply && g_rename (fullfilename, fullto) < 0) {
 							g_print (" e %s\n", fullto);
 							g_free  (fullto);
@@ -142,6 +153,8 @@ void process_dir (gchar *path, const GRegex *rx, const gchar *replacement) {
 	}
 	
 	g_hash_table_remove_all (renamedFiles);		// All fullto's are freed here
+	
+	return (ret);
 }
 
 int main (int argc, char *argv[]) {
