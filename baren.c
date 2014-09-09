@@ -111,6 +111,7 @@ gboolean process_dir (gchar *path, const GRegex *rx, const gchar *replacement) {
 					} else if (g_hash_table_contains (renamedFiles, fullto)) {
 						// File would overwrite an already-renamed file.
 						// In this case we never overwrite.
+						ret = FALSE;
 						g_print ("%c$ %s\n", isdir ? 'd' : ' ', fullto);
 						g_free  (fullto);
 					} else {
