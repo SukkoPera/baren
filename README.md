@@ -1,5 +1,6 @@
 Baren
 =====
+[![Build Status](https://travis-ci.org/SukkoPera/baren.svg?branch=master)](https://travis-ci.org/SukkoPera/baren)
 
 Baren is a Command-line Batch File Renamer. It allows quick mass-renaming of files through the use of Perl-compatible regular expressions.
 
